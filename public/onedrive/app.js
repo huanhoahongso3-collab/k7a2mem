@@ -28,7 +28,7 @@
       childCount: (n) => n + " mục",
       downloading: (name) => "Đang tải xuống " + name,
       root: "OneDrive",
-      backHome: "Về trang chủ",
+      backHome: "Quay lại",
       themeToggle: "Đổi giao diện sáng/tối",
       langToggle: "Change language / Đổi ngôn ngữ",
       close: "Đóng",
@@ -45,7 +45,7 @@
       childCount: (n) => n + " items",
       downloading: (name) => "Downloading " + name,
       root: "OneDrive",
-      backHome: "Back to home",
+      backHome: "Back",
       themeToggle: "Toggle light/dark theme",
       langToggle: "Change language / Đổi ngôn ngữ",
       close: "Close",
@@ -111,7 +111,21 @@
   function pathFromLocation() {
     let p = location.pathname;
     if (p.startsWith(BASE)) p = p.slice(BASE.length);
-    return p.replace(/^\/+|\/+$/g, ""); // trim leading/trailing slashes
+    p = p.replace(/^\/+|\/+$/g, ""); // trim leading/trailing slashes
+    // location.pathname keeps percent-encoding for characters like
+    // spaces/brackets — decode each segment so it matches the real
+    // (decoded) file/folder names returned by the list API, or a name
+    // containing those characters would never resolve.
+    return p
+      .split("/")
+      .map((seg) => {
+        try {
+          return decodeURIComponent(seg);
+        } catch (e) {
+          return seg;
+        }
+      })
+      .join("/");
   }
 
   let currentPath = pathFromLocation();
@@ -149,14 +163,6 @@
   // reads consistently across platforms and takes the M3 primary color.
   const FOLDER_SVG =
     '<svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
-
-  function formatSize(bytes) {
-    if (bytes == null) return "";
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
-  }
 
   function urlForPath(path) {
     return BASE + (path ? "/" + path.split("/").map(encodeURIComponent).join("/") : "");
@@ -256,9 +262,11 @@
     name.textContent = item.name;
     const meta = document.createElement("span");
     meta.className = "item-meta";
-    meta.textContent = item.isFolder
-      ? (item.childCount != null ? t("childCount", item.childCount) : "")
-      : formatSize(item.size);
+    // SharePoint's reported file size (File_x0020_Size / SMTotalSize) is
+    // unreliable for this anonymous listing API and doesn't match the
+    // real file size, so it's not shown at all rather than showing a
+    // wrong number.
+    meta.textContent = item.isFolder && item.childCount != null ? t("childCount", item.childCount) : "";
     info.appendChild(name);
     info.appendChild(meta);
 
@@ -286,6 +294,18 @@
     updateUrl(true);
     await loadFolder();
   }
+
+  // Back button steps up one folder level (like a file manager), only
+  // leaving the app for "/" once already at this section's own root.
+  backHome.addEventListener("click", () => {
+    if (!currentPath) {
+      location.href = "/";
+      return;
+    }
+    const segments = currentPath.split("/").filter(Boolean);
+    segments.pop();
+    navigate(segments.join("/"));
+  });
 
   function renderMore() {
     const next = Math.min(visibleCount + PAGE_SIZE, currentItems.length);
@@ -315,25 +335,57 @@
   );
   loadMoreObserver.observe(sentinel);
 
+  async function fetchItems(path) {
+    const res = await fetch("/api/onedrive/list?path=" + encodeURIComponent(path));
+    if (!res.ok) throw new Error("list failed: " + res.status);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  // A URL can point straight at a FILE, not just a folder — e.g.
+  // /onedrive/k7a2/a.png (pasted, bookmarked, or refreshed). There's no
+  // way to know that from the path alone, so the last segment is checked
+  // against its parent folder's listing: if it matches a non-folder item,
+  // this is a file deep link — show the containing folder and then either
+  // open the viewer (images/videos) or trigger a download (everything
+  // else), instead of trying to "list" a file as if it were a folder.
+  async function resolveDeepLink(fullPath) {
+    const segments = fullPath.split("/").filter(Boolean);
+    if (segments.length === 0) return { path: fullPath, items: await fetchItems(fullPath) };
+
+    const last = segments[segments.length - 1];
+    const parentPath = segments.slice(0, -1).join("/");
+    const parentItems = await fetchItems(parentPath);
+    const match = parentItems.find((it) => it.name === last);
+
+    if (match && !match.isFolder) {
+      return { path: parentPath, items: parentItems, fileMatch: match };
+    }
+    // Either it's a real folder, or an unresolved name — list it as a
+    // folder either way; a genuinely missing folder just comes back empty.
+    return { path: fullPath, items: await fetchItems(fullPath) };
+  }
+
   async function loadFolder() {
     loadingEl.hidden = false;
     gridEl.hidden = true;
     emptyEl.hidden = true;
     sentinel.style.display = "none";
-    renderBreadcrumb();
 
     lastLoadHadError = false;
+    let fileMatch = null;
     try {
-      const res = await fetch("/api/onedrive/list?path=" + encodeURIComponent(currentPath));
-      if (!res.ok) throw new Error("list failed: " + res.status);
-      const data = await res.json();
-      currentItems = data.items || [];
+      const result = await resolveDeepLink(currentPath);
+      currentItems = result.items;
+      fileMatch = result.fileMatch || null;
+      currentPath = result.path; // may have been trimmed to the parent folder
     } catch (e) {
       currentItems = [];
       lastLoadHadError = true;
       showSnackbar(t("loadFailed"));
     }
 
+    renderBreadcrumb();
     loadingEl.hidden = true;
     gridEl.innerHTML = "";
     visibleCount = 0;
@@ -348,6 +400,15 @@
 
     gridEl.hidden = false;
     renderMore();
+
+    if (fileMatch) {
+      if (fileMatch.isImage || fileMatch.isVideo) {
+        const idx = mediaItems.findIndex((m) => m.id === fileMatch.id);
+        if (idx !== -1) openViewer(idx);
+      } else {
+        downloadFile(fileMatch);
+      }
+    }
   }
 
   // --- Viewer ---
