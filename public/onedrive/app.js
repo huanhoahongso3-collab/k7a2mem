@@ -378,7 +378,13 @@
       const result = await resolveDeepLink(currentPath);
       currentItems = result.items;
       fileMatch = result.fileMatch || null;
-      currentPath = result.path; // may have been trimmed to the parent folder
+      if (result.path !== currentPath) {
+        // A file deep link resolves to its parent folder — keep the
+        // address bar in sync with that, or the back button (which reads
+        // the URL) ends up one level off from what's actually displayed.
+        currentPath = result.path;
+        updateUrl(false);
+      }
     } catch (e) {
       currentItems = [];
       lastLoadHadError = true;
