@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kỷ yếu K7A2</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-text">
+      <span class="material-title">Kỷ yếu K7A2</span>
+      <span id="photo-count" class="topbar-subtitle"></span>
+    </div>
+
+    <div class="searchbar-wrap">
+      <form id="search-form" class="searchbar" role="search">
+        <svg viewBox="0 0 24 24" width="20" height="20" class="searchbar-icon"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
+        <input id="search-input" class="searchbar-input" type="number" min="1" inputmode="numeric" placeholder="Tìm theo ID ảnh…" />
+      </form>
+      <span id="search-status" class="searchbar-status"></span>
+    </div>
+
+    <div class="topbar-actions">
+      <button id="lang-toggle" class="viewer-icon-btn topbar-icon-btn" title="Change language / Đổi ngôn ngữ">VI</button>
+      <button id="theme-toggle" class="viewer-icon-btn topbar-icon-btn" aria-label="Đổi giao diện sáng/tối" title="Đổi giao diện sáng/tối">
+        <svg id="theme-icon-dark" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
+        <svg id="theme-icon-light" viewBox="0 0 24 24" width="22" height="22" hidden><path fill="currentColor" d="M12 7a5 5 0 100 10 5 5 0 000-10zM2 13h2v-2H2v2zm18 0h2v-2h-2v2zm-9-9h2V2h-2v2zm0 18h2v-2h-2v2zM4.93 4.93l1.42 1.42 1.41-1.41-1.41-1.42-1.42 1.41zm12.32 12.32l1.41 1.41 1.42-1.41-1.42-1.42-1.41 1.42zM4.93 19.07l1.42-1.41-1.41-1.42-1.42 1.42 1.41 1.41zM17.25 6.35l1.42-1.42-1.42-1.41-1.41 1.41 1.41 1.42z"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="gallery" class="gallery"></main>
+
+<div id="sentinel" class="sentinel">
+  <div class="loader" aria-hidden="true"></div>
+</div>
+
+<div class="fab-group">
+  <button id="fab-top" class="fab" aria-label="Cuộn lên đầu" title="Cuộn lên đầu">
+    <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
+  </button>
+  <button id="fab-bottom" class="fab" aria-label="Cuộn xuống cuối" title="Cuộn xuống cuối">
+    <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 16l6-6-1.41-1.41L12 13.17l-4.59-4.58L6 10z"/></svg>
+  </button>
+</div>
+
+<div id="viewer" class="viewer" hidden>
+  <div class="viewer-backdrop" data-close></div>
+  <div class="viewer-content">
+    <div class="viewer-appbar">
+      <button class="viewer-icon-btn" data-close aria-label="Đóng">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+      <span id="viewer-position" class="viewer-position"></span>
+      <span id="viewer-id" class="viewer-id"></span>
+    </div>
+
+    <div class="viewer-stage">
+      <button class="viewer-btn viewer-prev" id="viewer-prev" aria-label="Ảnh trước">
+        <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <img id="viewer-img" alt="" />
+      <button class="viewer-btn viewer-next" id="viewer-next" aria-label="Ảnh tiếp theo">
+        <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+      </button>
+    </div>
+
+    <div class="viewer-toolbar">
+      <div class="zoombar">
+        <button class="zoombar-btn" id="zoom-out" aria-label="Thu nhỏ">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19 13H5v-2h14v2z"/></svg>
+        </button>
+        <span id="zoom-level" class="zoombar-level">100%</span>
+        <button class="zoombar-btn" id="zoom-in" aria-label="Phóng to">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </button>
+        <button class="zoombar-btn" id="zoom-reset" aria-label="Đặt lại thu phóng">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 13c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+        </button>
+      </div>
+      <button class="toolbar-btn" id="viewer-download">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+        <span>Tải xuống</span>
+      </button>
+      <button class="toolbar-btn" id="viewer-copy">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16 1H4a2 2 0 00-2 2v14h2V3h12V1zm3 4H8a2 2 0 00-2 2v14a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H8V7h11v14z"/></svg>
+        <span>Sao chép liên kết</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="snackbar" class="snackbar" role="status" aria-live="polite"></div>
+
+<script src="photos-data.js"></script>
+<script src="app.js"></script>
+<script>
+  // Caches Google Photos images across visits so the whole album doesn't
+  // re-download from Google every time you open the page. No-ops silently
+  // when opened via file:// (service workers require http/https) or on
+  // browsers without support — the app works the same either way, just
+  // without the caching benefit.
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+</script>
+</body>
+</html>
