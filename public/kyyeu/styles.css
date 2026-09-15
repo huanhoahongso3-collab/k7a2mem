@@ -443,6 +443,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  text-decoration: none;
   transition: background 150ms ease;
 }
 
