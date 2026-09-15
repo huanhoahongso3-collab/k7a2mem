@@ -235,7 +235,13 @@
     if (item.isFolder) {
       thumb.innerHTML = FOLDER_SVG;
       thumb.querySelector("svg").style.color = "var(--md-primary)";
-      btn.addEventListener("click", () => navigate(joinPath(currentPath, item.name)));
+      // Capture the containing folder's path NOW, not inside the click
+      // handler — navigate() updates `currentPath` synchronously before
+      // its (async) fetch resolves, so a second click on the same card
+      // before that finishes would otherwise re-read the already-updated
+      // currentPath and nest the path (e.g. "folder/folder/folder").
+      const targetPath = joinPath(currentPath, item.name);
+      btn.addEventListener("click", () => navigate(targetPath));
     } else if (item.isImage) {
       const img = document.createElement("img");
       img.loading = "lazy";
@@ -289,7 +295,15 @@
     showSnackbar(t("downloading", item.name));
   }
 
+  let isLoading = false;
+
   async function navigate(path) {
+    // Ignore clicks entirely while a load is already in flight — the
+    // spinner is already visible, so this is what actually stops
+    // spam-clicking a folder from doing anything (the earlier
+    // loadToken/path guards only stopped it from corrupting state).
+    if (isLoading) return;
+    if (path === currentPath) return; // already here
     currentPath = path;
     updateUrl(true);
     await loadFolder();
@@ -366,7 +380,18 @@
     return { path: fullPath, items: await fetchItems(fullPath) };
   }
 
+  // Bumped every time a load starts; a load only gets to touch the UI if
+  // it's still the most recent one by the time it resolves. Without this,
+  // double-clicking a folder (or clicking another one before the first
+  // finishes) fires two overlapping fetches, and whichever response lands
+  // second — even the stale one — used to stomp on the other's result,
+  // occasionally surfacing as a spurious error.
+  let loadToken = 0;
+
   async function loadFolder() {
+    const myToken = ++loadToken;
+    isLoading = true;
+
     loadingEl.hidden = false;
     gridEl.hidden = true;
     emptyEl.hidden = true;
@@ -374,21 +399,33 @@
 
     lastLoadHadError = false;
     let fileMatch = null;
+    let items = [];
+    let resolvedPath = currentPath;
+    let hadError = false;
     try {
       const result = await resolveDeepLink(currentPath);
-      currentItems = result.items;
+      items = result.items;
       fileMatch = result.fileMatch || null;
-      if (result.path !== currentPath) {
-        // A file deep link resolves to its parent folder — keep the
-        // address bar in sync with that, or the back button (which reads
-        // the URL) ends up one level off from what's actually displayed.
-        currentPath = result.path;
-        updateUrl(false);
-      }
+      resolvedPath = result.path;
     } catch (e) {
+      hadError = true;
+    }
+
+    if (myToken !== loadToken) return; // a newer load has since started — drop this one
+
+    if (hadError) {
       currentItems = [];
       lastLoadHadError = true;
       showSnackbar(t("loadFailed"));
+    } else {
+      currentItems = items;
+      if (resolvedPath !== currentPath) {
+        // A file deep link resolves to its parent folder — keep the
+        // address bar in sync with that, or the back button (which reads
+        // the URL) ends up one level off from what's actually displayed.
+        currentPath = resolvedPath;
+        updateUrl(false);
+      }
     }
 
     renderBreadcrumb();
@@ -401,11 +438,13 @@
     if (currentItems.length === 0) {
       emptyEl.querySelector("p").textContent = lastLoadHadError ? t("notConfigured") : t("empty");
       emptyEl.hidden = false;
+      isLoading = false;
       return;
     }
 
     gridEl.hidden = false;
     renderMore();
+    isLoading = false;
 
     if (fileMatch) {
       if (fileMatch.isImage || fileMatch.isVideo) {
