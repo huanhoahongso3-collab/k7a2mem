@@ -281,6 +281,17 @@
     // loads. Good enough to keep placement balanced as tiles stream in.
     const estimatedHeight = colWidth * 1.3;
     columnHeights[colIdx] += estimatedHeight + GAP;
+    // CSS gives an unloaded <img> `height: auto`, i.e. zero visual height
+    // until its request actually completes. Queued tiles (the concurrency
+    // limiter above can leave many waiting their turn) would otherwise sit
+    // at 0px while still counted as `estimatedHeight` tall in the
+    // bookkeeping above — shortestColumn() then drifts further off from
+    // reality with every batch rendered, which is what made the imbalance
+    // compound the deeper you scrolled. Reserving the estimate as an
+    // inline height keeps visual and bookkeeping height in sync; cleared
+    // on load so the real intrinsic size (already reconciled below) takes
+    // over.
+    img.style.height = estimatedHeight + "px";
 
     let attempt = 0;
     const MAX_ATTEMPTS = 3;
@@ -298,6 +309,7 @@
     img.addEventListener("load", () => {
       img._loaded = true;
       btn.classList.remove("tile-failed");
+      img.style.height = "";
       columnHeights[colIdx] += img.offsetHeight - estimatedHeight;
       maybeReveal(img);
       releaseLoadSlot();
