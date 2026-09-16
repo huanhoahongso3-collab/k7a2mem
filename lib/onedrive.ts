@@ -205,8 +205,10 @@ export async function listFolder(relativePath: string): Promise<DriveItem[]> {
   });
 }
 
-export async function fetchFileResponse(id: string): Promise<Response> {
+export async function fetchFileResponse(id: string, range?: string | null): Promise<Response> {
   const session = await getSession();
   const fileRef = decodeItemId(id);
-  return fetchWithSession(session, fileRef);
+  return fetchWithSession(session, fileRef, {
+    headers: range ? { Range: range } : undefined,
+  });
 }

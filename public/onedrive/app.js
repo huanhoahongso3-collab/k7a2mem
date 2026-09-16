@@ -159,6 +159,68 @@
     return FILE_ICONS[ext] || "📄";
   }
 
+  // Server-side thumbnail generation isn't available through the anonymous
+  // SharePoint session (the classic preview endpoint 500s/501s for it), so
+  // thumbnails are grabbed client-side instead: a hidden <video> loads just
+  // enough of the file (preload="metadata", helped by the content proxy's
+  // Range support) to seek to frame 0 and draw it onto a <canvas>. Cached
+  // by item id so re-rendering the same folder doesn't redo the work.
+  const videoThumbCache = new Map();
+
+  function captureVideoThumb(id, onReady) {
+    if (videoThumbCache.has(id)) {
+      onReady(videoThumbCache.get(id));
+      return;
+    }
+
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+    video.src = contentUrl(id);
+
+    const cleanup = () => {
+      video.removeAttribute("src");
+      video.load();
+    };
+
+    video.addEventListener(
+      "loadedmetadata",
+      () => {
+        try {
+          video.currentTime = Math.min(0.5, video.duration / 2 || 0);
+        } catch {
+          cleanup();
+        }
+      },
+      { once: true }
+    );
+
+    video.addEventListener(
+      "seeked",
+      () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          videoThumbCache.set(id, dataUrl);
+          onReady(dataUrl);
+        } catch {
+          // Cross-origin/tainted canvas or decode failure — just keep the icon.
+        } finally {
+          cleanup();
+        }
+      },
+      { once: true }
+    );
+
+    video.addEventListener("error", cleanup, { once: true });
+  }
+
   // A proper Material Symbols-style folder glyph instead of the emoji —
   // reads consistently across platforms and takes the M3 primary color.
   const FOLDER_SVG =
@@ -251,10 +313,16 @@
       thumb.appendChild(img);
       btn.addEventListener("click", () => openViewer(mediaIndex));
     } else if (item.isVideo) {
-      // No thumbnail source for videos in the no-API OneDrive backend —
-      // an icon + play badge instead of a broken/never-loading <img>.
       thumb.innerHTML =
         '<span class="icon">🎬</span><div class="play-badge"><svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>';
+      captureVideoThumb(item.id, (dataUrl) => {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = dataUrl;
+        img.classList.add("loaded");
+        thumb.querySelector(".icon")?.remove();
+        thumb.prepend(img);
+      });
       btn.addEventListener("click", () => openViewer(mediaIndex));
     } else {
       thumb.innerHTML = '<span class="icon">' + fileIcon(item.name) + "</span>";
