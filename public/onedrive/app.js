@@ -394,6 +394,8 @@
 
     loadingEl.hidden = false;
     gridEl.hidden = true;
+    gridEl.innerHTML = ""; // unmount the previous folder's cards immediately
+    visibleCount = 0;
     emptyEl.hidden = true;
     sentinel.style.display = "none";
 
@@ -430,8 +432,6 @@
 
     renderBreadcrumb();
     loadingEl.hidden = true;
-    gridEl.innerHTML = "";
-    visibleCount = 0;
     mediaItems = currentItems.filter((it) => it.isImage || it.isVideo);
     itemCountEl.textContent = lastLoadHadError ? "" : t("itemCount", currentItems.length);
 

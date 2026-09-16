@@ -200,6 +200,15 @@ body {
   gap: 12px;
 }
 
+/* .grid's own `display: grid` above otherwise overrides the native
+   `[hidden]` behavior (an author rule beats the UA stylesheet default at
+   equal specificity), so setting the `hidden` attribute from JS silently
+   did nothing — the previous folder's grid stayed fully visible under
+   the loading spinner instead of disappearing. */
+.grid[hidden] {
+  display: none;
+}
+
 .item-card {
   display: flex;
   flex-direction: column;
