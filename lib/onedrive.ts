@@ -95,7 +95,11 @@ async function redeemShareLink(): Promise<Session> {
     origin: finalUrl.origin,
     rootFolder: effectiveRoot,
     libraryPath,
-    expiresAt: Date.now() + 30 * 60 * 1000, // re-redeem every 30 min to be safe
+    // The redirect chain to redeem a fresh session is the slow part (several
+    // sequential hops to SharePoint) — so cache it long and only re-redeem
+    // reactively when a request actually 401s/403s (see fetchWithSession),
+    // rather than eagerly expiring it on a short timer.
+    expiresAt: Date.now() + 12 * 60 * 60 * 1000,
   };
   cachedSession = session;
   return session;
