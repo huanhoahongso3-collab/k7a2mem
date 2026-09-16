@@ -213,6 +213,38 @@
   const columnHeights = new Array(NUM_COLUMNS).fill(0);
   const GAP = 10;
 
+  // Tiles are created in row-major order (shortestColumn() round-robins
+  // across columns for same-height images), but without this queue every
+  // tile's <img> fired its request the instant it was created — on a slow
+  // connection the browser just works through that pile in whatever order
+  // its own heuristics pick, which can easily finish an entire column
+  // before even starting the next one, leaving the others as holes. Gating
+  // actual network starts through a small concurrency limit processed in
+  // creation order forces row-by-row completion instead: only a handful of
+  // requests are ever in flight, always the earliest not-yet-started ones,
+  // so every column keeps pace together.
+  const MAX_CONCURRENT_LOADS = 6;
+  let activeLoads = 0;
+  const loadQueue = [];
+
+  function enqueueLoad(start) {
+    loadQueue.push(start);
+    pumpLoadQueue();
+  }
+
+  function pumpLoadQueue() {
+    while (activeLoads < MAX_CONCURRENT_LOADS && loadQueue.length) {
+      const start = loadQueue.shift();
+      activeLoads++;
+      start();
+    }
+  }
+
+  function releaseLoadSlot() {
+    activeLoads--;
+    pumpLoadQueue();
+  }
+
   function shortestColumn() {
     let idx = 0;
     for (let i = 1; i < NUM_COLUMNS; i++) {
@@ -253,12 +285,14 @@
     let attempt = 0;
     const MAX_ATTEMPTS = 3;
     function loadImage() {
-      // Retry with the exact same URL — Google's `=w400` suffix is not a
-      // normal query string, so appending a cache-busting param to it
-      // (e.g. "&r=...") breaks the size directive and the request fails
-      // outright. Clearing src first is enough to force a fresh request.
-      if (attempt > 0) img.src = "";
-      img.src = thumbUrl(url);
+      enqueueLoad(() => {
+        // Retry with the exact same URL — Google's `=w400` suffix is not a
+        // normal query string, so appending a cache-busting param to it
+        // (e.g. "&r=...") breaks the size directive and the request fails
+        // outright. Clearing src first is enough to force a fresh request.
+        if (attempt > 0) img.src = "";
+        img.src = thumbUrl(url);
+      });
     }
 
     img.addEventListener("load", () => {
@@ -266,6 +300,7 @@
       btn.classList.remove("tile-failed");
       columnHeights[colIdx] += img.offsetHeight - estimatedHeight;
       maybeReveal(img);
+      releaseLoadSlot();
     });
 
     // Direct-hotlinked Google CDN images occasionally fail a request
@@ -275,6 +310,7 @@
     // these; if it still fails, mark it clearly instead of leaving a
     // silent, unexplained blank hole — clicking it retries again.
     img.addEventListener("error", () => {
+      releaseLoadSlot();
       attempt++;
       if (attempt < MAX_ATTEMPTS) {
         setTimeout(loadImage, 800 * attempt);
